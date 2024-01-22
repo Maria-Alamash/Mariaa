@@ -1,73 +1,27 @@
 int i;
-int  adcX;
-int  adcY =0;
-int  adcZ;
-char x1[3];
-char y1[3];
-char z1[3];
-int  S1;
-int  S2;
-int  S3;
-char SS1[3];
-char SS2[3];
-char SS3[3];
-int delayCntr=0;
+int blan=218; // Set Point for accelerometer
+int   adcX;  ///This for X axis in accelerometer accelerometer value
+int   adcY ; ///This for Y axis in accelerometer accelerometer value
+int   adcZ;  ///This for Z axis in accelerometer accelerometer value
+
+
+
+int  S1;  // Right LDR
+int  S2;  // Mid LDR
+int  S3;  // Left LDR
+
+int delayCntr=0; //For delay function
 int TMRO=0;
-//////////////ultrasonic///////////////////////////////
-sbit TRIG at RC3_bit;
 
-sbit TRIG_Direction at TRISC3_bit;
 
-sbit ECHO at RC2_bit;
-
-sbit ECHO_Direction at TRISC2_bit;
 ///////////////////////////////////////////////////////
-int dist=0,cnt ;
+int dist=0;
+int dist1=0;
+int dist2=0;
 
-unsigned char txt[15];
-//////////////////////////////////////////////////////////////////////////
-#define KP 1.0    // ????? ???????
-#define KI 0.1    // ????? ???????
-#define KD 0.01   // ????? ???????
+//////////////////////////////////////
+//Delay function
 
-int setpoint = 0; // ????? ???????? ??? ???? X
-int error, integral, derivative, last_error;
-int motor_speed;
-
-void PID_Controller() {
-    int current_position = 55;
-
-
-    error = setpoint - current_position;
-
-
-    integral += error;
-
-
-    derivative = error - last_error;
-
-
-    motor_speed = KP * error + KI * integral + KD * derivative;
-
-
-    last_error = error;
-
-
-    //Update_Motor_Speed(motor_speed);
-}
-////////////////////////////////////////
-void ADCInit(void){
-     ADCON1 = 0xC0; // right justified, all channels are analog
-     TRISE= 0x0F; // Port E is input
-     ADCON0 = 0x41; //prescale 16, channel3, dont start conversion, power on ATD
-}
-
-   unsigned int ADC_read0(void){
-ADCON0 = 0x41;
-ADCON0 = ADCON0 | 0x04;     //AN0
-     while((ADCON0 & 0x04)); // wait until the GO/DONE bit is reset, the ATD reading is ready
-return ((ADRESH<<8)|(ADRESL));
- }
 
 void mymsDelay(unsigned int d){
 delayCntr=0;
@@ -79,66 +33,67 @@ INTCON=INTCON & 0xDF;
 }
 
 
-void interrupt() {
+////////////////////////////////////////
+int UltraSonicBack() {
 
-     if (INTCON.INTF == 1){         // detect rising edge
+    int dist=0;
+TMR1H = 0;                  //Sets the Initial Value of Timer
+TMR1L = 0;                  //Sets the Initial Value of Timer
 
-       if (OPTION_REG.INTEDG ==1){
+RC0_BIT = 1;               //TRIGGER HIGH SEND THE PULSE
+mymsDelay(0.01);               //10uS Delay
+RC0_BIT = 0;               //TRIGGER LOW STOP PULSE
 
-           T1CON.TMR1ON = 1;      // put on timer1
+while(!RC1_BIT);           //Waiting for Echo
 
-           OPTION_REG.INTEDG = 0; // set interrupt on falling edge
+T1CON.F0 = 1;               //Timer Starts
+while(RC1_BIT);            //Waiting for Echo goes LOW
+T1CON.F0 = 0;               //Timer Stops
 
-           }
+dist = (TMR1L | (TMR1H<<8));   //Reads Timer Value
+dist = dist/58.82;                //Converts Time to Distance
+return dist;
 
-       else if (OPTION_REG.INTEDG == 0){ // detect falling edge
-
-             T1CON.TMR1ON = 0;           // put off timer1
-
-             dist =((65536*cnt)+(TMR1L | (TMR1H<<8)))*0.0034;
-
-             TMR1L=0;   // clear timer1L
-
-             TMR1H=0;   // clear timer1H
-
-             cnt=0;   // clear cnt variable
-
-             OPTION_REG.INTEDG = 1; // set interrupt on rising edge
-
-             }
-
-       INTCON.INTF = 0;
-
-
-
-       }
-
-       else if (PIR1.TMR1IF == 1){   // timer1 overflow
-
-       cnt++;
-
-       PIR1.TMR1IF =0;
-
-         }
-if ( INTCON & 0x04) {
-TMRO=247;
-delayCntr++;
-}
 }
 
+
+int UltrasonicFront() {
+
+    int dist=0;
+TMR1H = 0;                  //Sets the Initial Value of Timer
+TMR1L = 0;                  //Sets the Initial Value of Timer
+
+RC2_BIT = 1;               //TRIGGER HIGH SEND THE PULSE
+mymsDelay(0.01);               //10uS Delay
+RC2_BIT = 0;               //TRIGGER LOW STOP PULSE
+
+while(!RC3_BIT);           //Waiting for Echo
+
+T1CON.F0 = 1;               //Timer Starts
+while(RC3_BIT);            //Waiting for Echo goes LOW
+T1CON.F0 = 0;               //Timer Stops
+
+dist = (TMR1L | (TMR1H<<8));   //Reads Timer Value
+dist = dist/58.82;                //Converts Time to Distance
+return dist;
+
+}
 
 void forward(){
-    PORTB=PORTB|0x02;
-    PORTB=PORTB & ~0x08;
+     PORTB=PORTB|0x02;
+     PORTB=PORTB & ~0x08;
+
+
     if((PORTB & 0x02) == 0x02 & (PORTB & 0x08) == 0){
       for(i=0;i<200;i++){
         PORTB=PORTB|0x04;
         PORTB=PORTB|0x10;
-        mymsDelay(700);
+        //Delay_us(speed);
+        mymsDelay(1);
         PORTB=PORTB & ~0x04;
         PORTB=PORTB & ~0x10;
-        mymsDelay(700);
-
+       // Delay_us(speed);
+        mymsDelay(1);
       }
 
     }
@@ -148,14 +103,17 @@ void forward(){
 void back(){
     PORTB=PORTB & ~0x02;
     PORTB=PORTB|0x08;
-    if((PORTB & 0x02) == 0 & (PORTB & 0x08) == 0x08){
+    if(PORTB.F1==0 & PORTB.F3==1){
       for(i=0;i<200;i++){
         PORTB=PORTB|0x04;
         PORTB=PORTB|0x10;
-        mymsDelay(700);
+        //Delay_us(speed);
+        mymsDelay(1);
         PORTB=PORTB & ~0x04;
         PORTB=PORTB & ~0x10;
-        mymsDelay(700);
+        //Delay_us(speed);
+        mymsDelay(1);
+
       }
 
     }
@@ -169,106 +127,170 @@ void stop(){
 }
 void balance() {
 
-     if (adcY >= 340 ){
-          UART1_Write_Text("forward");
-          UART1_Write(13);     // Start a new line
-          UART1_Write(10);
+     if (adcY >= blan+20 ){
+
           forward();
         }
-        if (adcY <= 310 ){
-          UART1_Write_Text("backworld");
-          UART1_Write(13);     // Start a new line
-          UART1_Write(10);
+        if (adcY <= blan-20 ){
+
           back();
         }
-        if (adcY > 310  && adcY < 340 ){
-          UART1_Write_Text("Stop");
-          UART1_Write(13);     // Start a new line
-          UART1_Write(10);
+        if (adcY > blan+20  && adcY < blan-20 ){
+
           stop();
         }
 
 }
 
-void main(){
- PID_Controller();
-  UART1_Init(9200); // Initialize USART module
-  ADCInit();
+void ADCInit(void){
+    ADCON1 = 0x0F; // right justified, all channels are analog (AN0-AN7, ANE0-ANE2)
+    TRISA = 0x0F;  // Port A is input for AN0-AN3
+    TRISE = 0x07;  // Port E is input for ANE0-ANE2
+    ADCON0 = 0x41; // prescale 16, channel 0 (AN0), don't start conversion, power on ATD
+}
+  unsigned int ADC_read0(void){
+    ADCON0 = 0x41; // Select channel 0 (AN0)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
 
-  OPTION_REG.INTEDG = 1; //INTERRUPT ON RISING EDGE
-  T1CON = 0x09;     // timer control register
-  INTCON = 0xD0;   // interrupt control register
-  PIE1.TMR1IE=1;   // timer1 interrupt enable bit
-  T1CON.TMR1ON = 0; // timer1 0ff initially
-  trisb0_bit=1;
-  trisc=0;
-  portc=0;
+unsigned int ADC_read1(void){
+    ADCON0 = 0x42; // Select channel 1 (AN1)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
+
+unsigned int ADC_read2(void){
+    ADCON0 = 0x43; // Select channel 2 (AN2)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
+
+// Similarly, for Port E pins
+unsigned int ADC_read3(void){
+    ADCON0 = 0x44; // Select channel 3 (ANE0)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
+
+unsigned int ADC_read4(void){
+    ADCON0 = 0x45; // Select channel 4 (ANE1)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
+
+unsigned int ADC_read5(void){
+    ADCON0 = 0x46; // Select channel 5 (ANE2)
+    ADCON0 = ADCON0 | 0x04; // Start conversion
+    while((ADCON0 & 0x04)); // Wait for conversion to complete
+    return ((ADRESH << 8) | ADRESL);
+}
+
+void main(){
+
+
+  ADCInit();
+  dist1=0;
+  dist2=0;
+  dist1=UltraSonicBack();
+  dist2=UltrasonicFront();
+  
+TRISB = TRISB | 0b00100000; // Set RB5 as input
+
+
   TRISB=TRISB & ~0x04;//step
   PORTB=PORTB & ~0x04;
   TRISB=TRISB & ~0x10;
   PORTB=PORTB & ~0x10;
-  PORTB=PORTB|0x01;
-  TRISB=TRISB | 0x02;
+
   mymsDelay(20);
   TRISB=TRISB & ~0x02;//Diriction
   PORTB=PORTB & ~0x02;
   TRISB=TRISB & ~0x08;
   PORTB=PORTB & ~0x08;
+  ////////////////////
+  TRISC=0b00001001;
+  PORTC=0x00;
+  T1CON = 0x10;                 //Initialize Timer Module
+  TRISD=0b00000011;
+  PORTD=0x00;
   mymsDelay(20);
-  i=0;/*
-  UART1_Write_Text("PIC16F877A UART example");
-  UART1_Write(13);     // Start a new line
-  UART1_Write(10);   */
+  i=0;
+  
+  
   while (1){
-        Inttostr(dist,txt);
 
-        Ltrim(txt);
+        mymsDelay(0.02);
 
-          /*
-       UART1_Write_Text(txt);
-       UART1_Write(13);
-       UART1_Write(10);
-             */
 
-        TRIG=1;
 
-        mymsDelay(10);
 
-        TRIG=0;
+        S1 = ADC_read3();
+        S2 =ADC_read4();
+        S3 = ADC_read5();
+        adcX ==ADC_read0();
+        adcY = ADC_read1();
+        adcZ = ADC_read2();
+        
+        
+        if ((PORTB & 0x20) == 0x20){       /// This function to reset the set point to make Balance on it by bush buttom
 
-        mymsDelay(50);
-        adcX = ADC_Read(0);
-        adcY = ADC_Read(1);
-        S1 = ADC_Read(5);
-        S2 = ADC_Read(6);
-        S3 = ADC_Read(7);
+           blan = adcY;
 
-        /*IntToStr(adcY, y1);
-       UART1_Write_Text(y1);
-
-        UART1_Write(13);
-       UART1_Write(10);*/
-        if  ((PORTB & 0x01) == 0x01){
-           if (dist<15){
+        }
+        
+        
+              ///////////First Mode /////////////
+        if ((PORTD & 0x01) == 0x01){
+           if (dist1<15){
              back();
            }else{
               balance();
            }
+            if (dist2<15){
+             back();
+           }else{
+              balance();
+           }
+           ////
         }
-        if  ((PORTB & 0x02) == 0x02){
-          if(S2>900){
+        ///////////Second Mode /////////////
+        if ((PORTD & 0x02) == 0x02){//////LDR mode
+          if(S2>900){  //Mid LDR
+           forward();
+          }
+          else{
+             balance();
+          }
+          
+
+
+
+        if(S1>900){ ////Right LDR
             forward();
           }else{
              balance();
           }
-        }else{
+
+
+        
+        if(S3>900){//// Left LDR
+            forward();
+          }else{
+             balance();
+          } 
+
+        } else{
 
 
             balance();
 
         }
+    }
 
-
-
-  }
 }
